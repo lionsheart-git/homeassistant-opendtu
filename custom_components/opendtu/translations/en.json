@@ -4,13 +4,12 @@
             "user": {
                 "description": "If you need help with the configuration have a look here: {documentation_url}",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "host": "Host"
                 }
             }
         },
         "error": {
-            "auth": "Username/Password is wrong.",
+            "auth": "Authentication is required or failed.",
             "connection": "Unable to connect to the server.",
             "unknown": "Unknown error occurred."
         },

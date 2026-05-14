@@ -1,4 +1,4 @@
-"""Sensor platform for integration_blueprint."""
+"""Sensor platform for opendtu."""
 
 from __future__ import annotations
 
@@ -6,32 +6,32 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 
-from .entity import IntegrationBlueprintEntity
+from .entity import OpenDtuEntity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import BlueprintDataUpdateCoordinator
-    from .data import IntegrationBlueprintConfigEntry
+    from .coordinator import OpenDtuDataUpdateCoordinator
+    from .data import OpenDtuConfigEntry
 
 ENTITY_DESCRIPTIONS = (
     SensorEntityDescription(
-        key="integration_blueprint",
-        name="Integration Sensor",
-        icon="mdi:format-quote-close",
+        key="opendtu",
+        name="OpenDTU Status",
+        icon="mdi:solar-power",
     ),
 )
 
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
-    entry: IntegrationBlueprintConfigEntry,
+    entry: OpenDtuConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform."""
     async_add_entities(
-        IntegrationBlueprintSensor(
+        OpenDtuSensor(
             coordinator=entry.runtime_data.coordinator,
             entity_description=entity_description,
         )
@@ -39,12 +39,12 @@ async def async_setup_entry(
     )
 
 
-class IntegrationBlueprintSensor(IntegrationBlueprintEntity, SensorEntity):
-    """integration_blueprint Sensor class."""
+class OpenDtuSensor(OpenDtuEntity, SensorEntity):
+    """opendtu Sensor class."""
 
     def __init__(
         self,
-        coordinator: BlueprintDataUpdateCoordinator,
+        coordinator: OpenDtuDataUpdateCoordinator,
         entity_description: SensorEntityDescription,
     ) -> None:
         """Initialize the sensor class."""
@@ -54,4 +54,6 @@ class IntegrationBlueprintSensor(IntegrationBlueprintEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return the native value of the sensor."""
-        return self.coordinator.data.get("body")
+        if self.coordinator.data:
+            return "online"
+        return None

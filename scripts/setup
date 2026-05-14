@@ -4,4 +4,13 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-python3 -m pip install --requirement requirements.txt
+if [[ -x "${HOME}/.local/bin/uv" ]]; then
+    export PATH="${HOME}/.local/bin:${PATH}"
+fi
+
+if ! command -v uv >/dev/null 2>&1; then
+    python -m pip install --user uv
+    export PATH="${HOME}/.local/bin:${PATH}"
+fi
+
+uv sync --group dev

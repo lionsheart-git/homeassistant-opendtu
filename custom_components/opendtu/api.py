@@ -1,4 +1,4 @@
-"""Sample API Client."""
+"""OpenDTU API client."""
 
 from __future__ import annotations
 
@@ -9,18 +9,18 @@ import aiohttp
 import async_timeout
 
 
-class IntegrationBlueprintApiClientError(Exception):
+class OpenDtuApiClientError(Exception):
     """Exception to indicate a general API error."""
 
 
-class IntegrationBlueprintApiClientCommunicationError(
-    IntegrationBlueprintApiClientError,
+class OpenDtuApiClientCommunicationError(
+    OpenDtuApiClientError,
 ):
     """Exception to indicate a communication error."""
 
 
-class IntegrationBlueprintApiClientAuthenticationError(
-    IntegrationBlueprintApiClientError,
+class OpenDtuApiClientAuthenticationError(
+    OpenDtuApiClientError,
 ):
     """Exception to indicate an authentication error."""
 
@@ -29,50 +29,40 @@ def _verify_response_or_raise(response: aiohttp.ClientResponse) -> None:
     """Verify that the response is valid."""
     if response.status in (401, 403):
         msg = "Invalid credentials"
-        raise IntegrationBlueprintApiClientAuthenticationError(
+        raise OpenDtuApiClientAuthenticationError(
             msg,
         )
     response.raise_for_status()
 
 
-class IntegrationBlueprintApiClient:
-    """Sample API Client."""
+class OpenDtuApiClient:
+    """OpenDTU API client."""
 
     def __init__(
         self,
-        username: str,
-        password: str,
+        host: str,
         session: aiohttp.ClientSession,
     ) -> None:
-        """Sample API Client."""
-        self._username = username
-        self._password = password
+        """Initialize the OpenDTU API client."""
+        self._host = host.strip()
         self._session = session
 
     async def async_get_data(self) -> Any:
         """Get data from the API."""
         return await self._api_wrapper(
             method="get",
-            url="https://jsonplaceholder.typicode.com/posts/1",
-        )
-
-    async def async_set_title(self, value: str) -> Any:
-        """Get data from the API."""
-        return await self._api_wrapper(
-            method="patch",
-            url="https://jsonplaceholder.typicode.com/posts/1",
-            data={"title": value},
-            headers={"Content-type": "application/json; charset=UTF-8"},
+            path="/api/livedata/status",
         )
 
     async def _api_wrapper(
         self,
         method: str,
-        url: str,
+        path: str,
         data: dict | None = None,
         headers: dict | None = None,
     ) -> Any:
         """Get information from the API."""
+        url = f"{self._base_url}{path}"
         try:
             async with async_timeout.timeout(10):
                 response = await self._session.request(
@@ -86,16 +76,23 @@ class IntegrationBlueprintApiClient:
 
         except TimeoutError as exception:
             msg = f"Timeout error fetching information - {exception}"
-            raise IntegrationBlueprintApiClientCommunicationError(
+            raise OpenDtuApiClientCommunicationError(
                 msg,
             ) from exception
         except (aiohttp.ClientError, socket.gaierror) as exception:
             msg = f"Error fetching information - {exception}"
-            raise IntegrationBlueprintApiClientCommunicationError(
+            raise OpenDtuApiClientCommunicationError(
                 msg,
             ) from exception
         except Exception as exception:  # pylint: disable=broad-except
             msg = f"Something really wrong happened! - {exception}"
-            raise IntegrationBlueprintApiClientError(
+            raise OpenDtuApiClientError(
                 msg,
             ) from exception
+
+    @property
+    def _base_url(self) -> str:
+        """Return the normalized base URL for the OpenDTU device."""
+        if self._host.startswith(("http://", "https://")):
+            return self._host.rstrip("/")
+        return f"http://{self._host}".rstrip("/")
