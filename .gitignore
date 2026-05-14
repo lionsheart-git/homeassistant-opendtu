@@ -4,7 +4,7 @@ __pycache__
 .pytest*
 *.egg-info
 */build/*
-*/dist/*
+**/dist/*
 
 
 # misc

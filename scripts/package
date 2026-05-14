@@ -31,7 +31,7 @@ with ZipFile(package, "w", ZIP_DEFLATED) as archive:
             continue
         if "__pycache__" in path.parts or path.suffix == ".pyc":
             continue
-        archive.write(path, path.relative_to(root))
+        archive.write(path, path.relative_to(source))
 
 print(f"Created {package.relative_to(root)}")
 PY
