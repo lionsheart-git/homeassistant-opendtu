@@ -10,6 +10,14 @@ from urllib.parse import quote
 import aiohttp
 import async_timeout
 
+DTU_STATUS_ENDPOINTS = {
+    "mqtt": "/api/mqtt/status",
+    "network": "/api/network/status",
+    "ntp": "/api/ntp/status",
+    "power": "/api/power/status",
+    "system": "/api/system/status",
+}
+
 
 class OpenDtuApiClientError(Exception):
     """Exception to indicate a general API error."""
@@ -49,18 +57,46 @@ class OpenDtuApiClient:
         self._host = host.strip()
         self._session = session
 
-    async def async_get_data(self) -> Any:
+    async def async_get_data(self, *, include_diagnostics: bool = True) -> Any:
         """Get data from the API."""
         data = await self._api_wrapper(
             method="get",
             path="/api/livedata/status",
         )
-        await asyncio.gather(
-            self._add_inverter_details(data),
-            self._add_limit_status(data),
-            self._add_eventlogs(data),
-        )
+        api_tasks = [self._add_inverter_details(data)]
+        if include_diagnostics:
+            api_tasks.extend(
+                (
+                    self._add_dtu_statuses(data),
+                    self._add_limit_status(data),
+                    self._add_eventlogs(data),
+                )
+            )
+        await asyncio.gather(*api_tasks)
         return data
+
+    async def _add_dtu_statuses(self, data: Any) -> None:
+        """Add DTU-level status endpoint data to the common status response."""
+        if not isinstance(data, dict):
+            return
+
+        endpoint_results = await asyncio.gather(
+            *(
+                self._api_wrapper_optional(method="get", path=path)
+                for path in DTU_STATUS_ENDPOINTS.values()
+            ),
+        )
+        status_data = {
+            endpoint: result
+            for endpoint, result in zip(
+                DTU_STATUS_ENDPOINTS,
+                endpoint_results,
+                strict=True,
+            )
+            if isinstance(result, dict)
+        }
+        if status_data:
+            data["_status"] = status_data
 
     async def _add_inverter_details(self, data: Any) -> None:
         """Add detailed inverter live data to the common status response."""

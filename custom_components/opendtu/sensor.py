@@ -27,6 +27,7 @@ from homeassistant.const import (
 from homeassistant.util import slugify
 
 from .entity import OpenDtuEntity, get_inverter_device_info
+from .naming import format_dtu_status_name, should_skip_dtu_status_path
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -37,6 +38,9 @@ if TYPE_CHECKING:
 
 
 type OpenDtuValueFn = Callable[[Any], int | float | str | None]
+type OpenDtuAttrFn = Callable[[Any], dict[str, Any] | None]
+
+MAX_SENSOR_STATE_LENGTH = 255
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,6 +48,7 @@ class OpenDtuSensorEntityDescription(SensorEntityDescription):
     """Description for an OpenDTU sensor."""
 
     value_fn: OpenDtuValueFn
+    attr_fn: OpenDtuAttrFn | None = None
     measurement_path: tuple[str, str, str] | None = None
 
 
@@ -100,12 +105,6 @@ TOTAL_SENSOR_DESCRIPTIONS = (
 )
 
 INVERTER_SENSOR_DESCRIPTIONS = (
-    OpenDtuSensorEntityDescription(
-        key="serial",
-        name="Serial",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data: _get_value(data, ("serial",)),
-    ),
     OpenDtuSensorEntityDescription(
         key="name",
         name="Name",
@@ -189,6 +188,15 @@ async def async_setup_entry(
         )
         for entity_description in TOTAL_SENSOR_DESCRIPTIONS
     )
+    async_add_entities(
+        OpenDtuTotalSensor(
+            coordinator=entry.runtime_data.coordinator,
+            entity_description=entity_description,
+        )
+        for entity_description in _get_dtu_status_sensor_descriptions(
+            entry.runtime_data.coordinator.data,
+        )
+    )
 
     inverters = _get_inverters(entry.runtime_data.coordinator.data)
     async_add_entities(
@@ -225,6 +233,7 @@ class OpenDtuTotalSensor(OpenDtuEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._value_fn = entity_description.value_fn
+        self._attr_fn = entity_description.attr_fn
         self._attr_unique_id = (
             f"{coordinator.config_entry.entry_id}_{entity_description.key}"
         )
@@ -233,6 +242,13 @@ class OpenDtuTotalSensor(OpenDtuEntity, SensorEntity):
     def native_value(self) -> int | float | str | None:
         """Return the native value of the sensor."""
         return self._value_fn(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return extra state attributes for the sensor."""
+        if self._attr_fn is None:
+            return None
+        return self._attr_fn(self.coordinator.data)
 
 
 class OpenDtuInverterSensor(OpenDtuEntity, SensorEntity):
@@ -304,6 +320,82 @@ def _get_value(data: Any, path: tuple[str | int, ...]) -> Any:
         value = value.get(part)
 
     return value
+
+
+def _get_dtu_status_sensor_descriptions(
+    data: Any,
+) -> list[OpenDtuSensorEntityDescription]:
+    """Return sensor descriptions for DTU status endpoint values."""
+    descriptions: list[OpenDtuSensorEntityDescription] = []
+    status_data = _get_value(data, ("_status",))
+    if not isinstance(status_data, dict):
+        return descriptions
+
+    for endpoint in sorted(status_data):
+        endpoint_data = status_data[endpoint]
+        for path, value in _iter_scalar_values(endpoint_data):
+            if should_skip_dtu_status_path(str(endpoint), path):
+                continue
+            if isinstance(value, bool) or value is None:
+                continue
+            if not isinstance(value, int | float | str):
+                continue
+
+            full_path = ("_status", str(endpoint), *path)
+            numeric_value = isinstance(value, int | float) and not isinstance(
+                value,
+                bool,
+            )
+            descriptions.append(
+                OpenDtuSensorEntityDescription(
+                    key=slugify(f"dtu_status_{endpoint}_{'_'.join(path)}"),
+                    name=format_dtu_status_name(str(endpoint), path),
+                    native_unit_of_measurement=_get_status_unit(path)
+                    if numeric_value
+                    else None,
+                    device_class=_get_status_device_class(path)
+                    if numeric_value
+                    else None,
+                    entity_category=EntityCategory.DIAGNOSTIC,
+                    entity_registry_enabled_default=False,
+                    value_fn=lambda data, value_path=full_path: (
+                        _get_status_native_value(
+                            data,
+                            value_path,
+                        )
+                    ),
+                    attr_fn=lambda data, value_path=full_path: _get_status_attributes(
+                        data,
+                        value_path,
+                    ),
+                )
+            )
+
+    return descriptions
+
+
+def _get_status_native_value(
+    data: Any,
+    path: tuple[str | int, ...],
+) -> int | float | str | None:
+    """Return a HA-safe native value for dynamic status sensors."""
+    value = _get_value(data, path)
+    if isinstance(value, str) and len(value) > MAX_SENSOR_STATE_LENGTH:
+        return "available"
+    if isinstance(value, int | float | str):
+        return value
+    return None
+
+
+def _get_status_attributes(
+    data: Any,
+    path: tuple[str | int, ...],
+) -> dict[str, Any] | None:
+    """Return attributes for dynamic status sensors."""
+    value = _get_value(data, path)
+    if isinstance(value, str) and len(value) > MAX_SENSOR_STATE_LENGTH:
+        return {"value": value}
+    return None
 
 
 def _round_value(value: Any, precision: int | None) -> int | float | None:
@@ -456,6 +548,47 @@ def _get_unit_of_measurement(measurement: dict[str, Any]) -> str | None:
     }.get(str(unit), str(unit))
 
 
+def _get_status_unit(path: tuple[str, ...]) -> str | None:
+    """Return the Home Assistant unit for a DTU status value."""
+    path_key = "_".join(path).casefold()
+    unit_rules = (
+        (("uptime",), UnitOfTime.SECONDS),
+        (("rssi",), "dBm"),
+        (("frequency",), UnitOfFrequency.HERTZ),
+        (("voltage",), UnitOfElectricPotential.VOLT),
+        (("current",), UnitOfElectricCurrent.AMPERE),
+        (("power",), UnitOfPower.WATT),
+        (("temperature",), UnitOfTemperature.CELSIUS),
+        (("percentage", "percent"), PERCENTAGE),
+    )
+    return _first_matching_status_metadata(path_key, unit_rules)
+
+
+def _get_status_device_class(path: tuple[str, ...]) -> SensorDeviceClass | None:
+    """Return the Home Assistant device class for a DTU status value."""
+    path_key = "_".join(path).casefold()
+    device_class_rules = (
+        (("uptime",), SensorDeviceClass.DURATION),
+        (("frequency",), SensorDeviceClass.FREQUENCY),
+        (("voltage",), SensorDeviceClass.VOLTAGE),
+        (("current",), SensorDeviceClass.CURRENT),
+        (("power",), SensorDeviceClass.POWER),
+        (("temperature",), SensorDeviceClass.TEMPERATURE),
+    )
+    return _first_matching_status_metadata(path_key, device_class_rules)
+
+
+def _first_matching_status_metadata[T](
+    path_key: str,
+    rules: tuple[tuple[tuple[str, ...], T], ...],
+) -> T | None:
+    """Return metadata for the first matching status path rule."""
+    for needles, value in rules:
+        if any(needle in path_key for needle in needles):
+            return value
+    return None
+
+
 def _get_device_class(
     metric: str,
     measurement: dict[str, Any],
@@ -496,6 +629,23 @@ def _get_state_class(
 def _format_measurement_name(metric: str) -> str:
     """Return a human readable measurement name."""
     return MEASUREMENT_NAMES.get(metric, metric.replace("_", " "))
+
+
+def _iter_scalar_values(
+    data: Any,
+    prefix: tuple[str, ...] = (),
+) -> list[tuple[tuple[str, ...], Any]]:
+    """Return scalar values from nested OpenDTU status data."""
+    values: list[tuple[tuple[str, ...], Any]] = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            values.extend(_iter_scalar_values(value, (*prefix, str(key))))
+    elif isinstance(data, list):
+        for index, value in enumerate(data):
+            values.extend(_iter_scalar_values(value, (*prefix, str(index))))
+    else:
+        values.append((prefix, data))
+    return values
 
 
 def _format_measurement_entity_name(

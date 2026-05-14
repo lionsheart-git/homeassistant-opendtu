@@ -64,6 +64,14 @@ DETAIL_STATUS = {
     ],
 }
 
+DTU_STATUS_ENDPOINTS = {
+    "mqtt": "/api/mqtt/status",
+    "network": "/api/network/status",
+    "ntp": "/api/ntp/status",
+    "power": "/api/power/status",
+    "system": "/api/system/status",
+}
+
 
 @pytest.mark.asyncio
 async def test_async_get_data_enriches_inverters() -> None:
@@ -100,6 +108,15 @@ async def test_async_get_data_enriches_inverters() -> None:
                 },
             },
         )
+        for endpoint, path in DTU_STATUS_ENDPOINTS.items():
+            mocked.get(
+                f"http://opendtu.local{path}",
+                payload={
+                    "enabled": True,
+                    "status": f"{endpoint} ok",
+                    "uptime": 123,
+                },
+            )
 
         async with aiohttp.ClientSession() as session:
             client = OpenDtuApiClient("opendtu.local", session)
@@ -109,6 +126,29 @@ async def test_async_get_data_enriches_inverters() -> None:
     assert inverter["AC"]["0"]["Power"]["v"] == 120.12
     assert inverter["_limit_status"]["max_power"] == 600
     assert inverter["_eventlog"]["events"][0]["message"] == "Inverter start"
+    assert set(data["_status"]) == set(DTU_STATUS_ENDPOINTS)
+    assert data["_status"]["network"]["status"] == "network ok"
+
+
+@pytest.mark.asyncio
+async def test_async_get_data_can_skip_diagnostics() -> None:
+    """Test that diagnostics can be skipped for fast live-data updates."""
+    with aioresponses() as mocked:
+        mocked.get("http://opendtu.local/api/livedata/status", payload=COMMON_STATUS)
+        mocked.get(
+            "http://opendtu.local/api/livedata/status?inv=123456789",
+            payload=DETAIL_STATUS,
+        )
+
+        async with aiohttp.ClientSession() as session:
+            client = OpenDtuApiClient("opendtu.local", session)
+            data = await client.async_get_data(include_diagnostics=False)
+
+    inverter = data["inverters"][0]
+    assert inverter["AC"]["0"]["Power"]["v"] == 120.12
+    assert "_status" not in data
+    assert "_limit_status" not in inverter
+    assert "_eventlog" not in inverter
 
 
 @pytest.mark.asyncio
@@ -119,6 +159,8 @@ async def test_optional_endpoints_do_not_fail_update() -> None:
         mocked.get("http://opendtu.local/api/livedata/status?inv=123456789", status=404)
         mocked.get("http://opendtu.local/api/limit/status", status=404)
         mocked.get("http://opendtu.local/api/eventlog/status?inv=123456789", status=404)
+        for path in DTU_STATUS_ENDPOINTS.values():
+            mocked.get(f"http://opendtu.local{path}", status=404)
 
         async with aiohttp.ClientSession() as session:
             client = OpenDtuApiClient("opendtu.local", session)
@@ -127,6 +169,7 @@ async def test_optional_endpoints_do_not_fail_update() -> None:
     assert data["inverters"][0]["serial"] == "123456789"
     assert "_limit_status" not in data["inverters"][0]
     assert "_eventlog" not in data["inverters"][0]
+    assert "_status" not in data
 
 
 @pytest.mark.asyncio

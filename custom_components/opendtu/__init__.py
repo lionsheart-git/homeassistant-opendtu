@@ -15,9 +15,16 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
 from .api import OpenDtuApiClient
-from .const import DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN, LOGGER
+from .const import (
+    CONF_DIAGNOSTIC_SCAN_INTERVAL,
+    DEFAULT_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
+    DEFAULT_SCAN_INTERVAL_SECONDS,
+    DOMAIN,
+    LOGGER,
+)
 from .coordinator import OpenDtuDataUpdateCoordinator
 from .data import OpenDtuData
+from .entity import get_dtu_hostname
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -46,6 +53,12 @@ async def async_setup_entry(
                 DEFAULT_SCAN_INTERVAL_SECONDS,
             ),
         ),
+        diagnostic_update_interval=timedelta(
+            seconds=entry.options.get(
+                CONF_DIAGNOSTIC_SCAN_INTERVAL,
+                DEFAULT_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
+            ),
+        ),
     )
     entry.runtime_data = OpenDtuData(
         client=OpenDtuApiClient(
@@ -58,6 +71,10 @@ async def async_setup_entry(
 
     # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
     await coordinator.async_config_entry_first_refresh()
+    if (
+        hostname := get_dtu_hostname(coordinator.data)
+    ) is not None and entry.title != hostname:
+        hass.config_entries.async_update_entry(entry, title=hostname)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))

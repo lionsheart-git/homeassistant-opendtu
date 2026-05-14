@@ -20,5 +20,23 @@ uv run ty check custom_components/opendtu
 scripts/develop
 ```
 
-The first implemented API endpoint target is `/api/livedata/status`, which will
-be used for OpenDTU status and production sensors.
+## Supported OpenDTU APIs
+
+The integration currently polls these unauthenticated read-only endpoints:
+
+- `/api/livedata/status`
+- `/api/livedata/status?inv=<serial>`
+- `/api/eventlog/status?inv=<serial>`
+- `/api/limit/status`
+- `/api/mqtt/status`
+- `/api/network/status`
+- `/api/ntp/status`
+- `/api/power/status`
+- `/api/system/status`
+
+The DTU-level status endpoints are exposed on the `OpenDTU` device as
+diagnostic sensors/binary sensors. Inverter-specific data is exposed on the
+corresponding inverter device.
+
+The integration does not currently cover `/api/prometheus/metrics`,
+authenticated APIs, or POST APIs.

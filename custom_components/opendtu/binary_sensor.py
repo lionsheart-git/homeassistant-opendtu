@@ -12,8 +12,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.const import EntityCategory
+from homeassistant.util import slugify
 
 from .entity import OpenDtuEntity, get_inverter_device_info
+from .naming import format_dtu_status_name, should_skip_dtu_status_path
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -104,6 +106,15 @@ async def async_setup_entry(
         )
         for entity_description in HINT_BINARY_SENSOR_DESCRIPTIONS
     )
+    async_add_entities(
+        OpenDtuHintBinarySensor(
+            coordinator=entry.runtime_data.coordinator,
+            entity_description=entity_description,
+        )
+        for entity_description in _get_dtu_status_binary_sensor_descriptions(
+            entry.runtime_data.coordinator.data,
+        )
+    )
 
     inverters = _get_inverters(entry.runtime_data.coordinator.data)
     async_add_entities(
@@ -192,6 +203,39 @@ def _get_value(data: Any, path: tuple[str | int, ...]) -> Any:
     return value
 
 
+def _get_dtu_status_binary_sensor_descriptions(
+    data: Any,
+) -> list[OpenDtuBinarySensorEntityDescription]:
+    """Return binary sensor descriptions for DTU status endpoint values."""
+    descriptions: list[OpenDtuBinarySensorEntityDescription] = []
+    status_data = _get_value(data, ("_status",))
+    if not isinstance(status_data, dict):
+        return descriptions
+
+    for endpoint in sorted(status_data):
+        endpoint_data = status_data[endpoint]
+        for path, value in _iter_scalar_values(endpoint_data):
+            if should_skip_dtu_status_path(str(endpoint), path):
+                continue
+            if not isinstance(value, bool):
+                continue
+
+            full_path = ("_status", str(endpoint), *path)
+            descriptions.append(
+                OpenDtuBinarySensorEntityDescription(
+                    key=slugify(f"dtu_status_{endpoint}_{'_'.join(path)}"),
+                    name=format_dtu_status_name(str(endpoint), path),
+                    entity_category=EntityCategory.DIAGNOSTIC,
+                    entity_registry_enabled_default=False,
+                    value_fn=lambda data, value_path=full_path: _to_bool(
+                        _get_value(data, value_path),
+                    ),
+                )
+            )
+
+    return descriptions
+
+
 def _to_bool(value: Any) -> bool | None:
     """Convert OpenDTU API values to a boolean state."""
     if isinstance(value, bool):
@@ -229,3 +273,20 @@ def _get_inverter_identifier(inverter: Any, inverter_index: int) -> str:
     if serial not in (None, ""):
         return str(serial)
     return str(inverter_index)
+
+
+def _iter_scalar_values(
+    data: Any,
+    prefix: tuple[str, ...] = (),
+) -> list[tuple[tuple[str, ...], Any]]:
+    """Return scalar values from nested OpenDTU status data."""
+    values: list[tuple[tuple[str, ...], Any]] = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            values.extend(_iter_scalar_values(value, (*prefix, str(key))))
+    elif isinstance(data, list):
+        for index, value in enumerate(data):
+            values.extend(_iter_scalar_values(value, (*prefix, str(index))))
+    else:
+        values.append((prefix, data))
+    return values

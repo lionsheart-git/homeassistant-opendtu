@@ -21,9 +21,11 @@
         "step": {
             "init": {
                 "data": {
+                    "diagnostic_scan_interval": "Diagnostic update interval",
                     "scan_interval": "HA update interval"
                 },
                 "data_description": {
+                    "diagnostic_scan_interval": "How often Home Assistant should refresh optional diagnostic endpoints such as system, MQTT, network, NTP, power limit, and event log data.",
                     "scan_interval": "How often Home Assistant should poll the OpenDTU REST API."
                 }
             }

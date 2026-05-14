@@ -17,12 +17,17 @@ from .api import (
     OpenDtuApiClientError,
 )
 from .const import (
+    CONF_DIAGNOSTIC_SCAN_INTERVAL,
+    DEFAULT_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
     DEFAULT_SCAN_INTERVAL_SECONDS,
     DOMAIN,
     LOGGER,
+    MAX_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
     MAX_SCAN_INTERVAL_SECONDS,
+    MIN_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
     MIN_SCAN_INTERVAL_SECONDS,
 )
+from .entity import get_dtu_hostname
 
 
 class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -47,7 +52,7 @@ class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 host = user_input[CONF_HOST].strip()
-                await self._test_credentials(
+                data = await self._test_credentials(
                     host=host,
                 )
             except OpenDtuApiClientAuthenticationError as exception:
@@ -63,7 +68,7 @@ class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(host.lower())
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=host,
+                    title=get_dtu_hostname(data) or host,
                     data={CONF_HOST: host},
                 )
 
@@ -89,13 +94,13 @@ class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=_errors,
         )
 
-    async def _test_credentials(self, host: str) -> None:
+    async def _test_credentials(self, host: str) -> object:
         """Validate the OpenDTU host."""
         client = OpenDtuApiClient(
             host=host,
             session=async_create_clientsession(self.hass),
         )
-        await client.async_get_data()
+        return await client.async_get_data()
 
 
 class OpenDtuOptionsFlowHandler(config_entries.OptionsFlow):
@@ -111,6 +116,9 @@ class OpenDtuOptionsFlowHandler(config_entries.OptionsFlow):
                 title="",
                 data={
                     CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+                    CONF_DIAGNOSTIC_SCAN_INTERVAL: int(
+                        user_input[CONF_DIAGNOSTIC_SCAN_INTERVAL],
+                    ),
                 },
             )
 
@@ -128,6 +136,21 @@ class OpenDtuOptionsFlowHandler(config_entries.OptionsFlow):
                         selector.NumberSelectorConfig(
                             min=MIN_SCAN_INTERVAL_SECONDS,
                             max=MAX_SCAN_INTERVAL_SECONDS,
+                            step=1,
+                            unit_of_measurement=UnitOfTime.SECONDS,
+                            mode=selector.NumberSelectorMode.BOX,
+                        ),
+                    ),
+                    vol.Required(
+                        CONF_DIAGNOSTIC_SCAN_INTERVAL,
+                        default=self.config_entry.options.get(
+                            CONF_DIAGNOSTIC_SCAN_INTERVAL,
+                            DEFAULT_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
+                        ),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=MIN_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
+                            max=MAX_DIAGNOSTIC_SCAN_INTERVAL_SECONDS,
                             step=1,
                             unit_of_measurement=UnitOfTime.SECONDS,
                             mode=selector.NumberSelectorMode.BOX,
