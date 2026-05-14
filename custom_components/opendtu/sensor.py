@@ -15,11 +15,16 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     PERCENTAGE,
     EntityCategory,
+    UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
+    UnitOfFrequency,
     UnitOfPower,
+    UnitOfReactivePower,
+    UnitOfTemperature,
     UnitOfTime,
 )
+from homeassistant.util import slugify
 
 from .entity import OpenDtuEntity, get_inverter_device_info
 
@@ -39,6 +44,21 @@ class OpenDtuSensorEntityDescription(SensorEntityDescription):
     """Description for an OpenDTU sensor."""
 
     value_fn: OpenDtuValueFn
+    measurement_path: tuple[str, str, str] | None = None
+
+
+INVERTER_MEASUREMENT_GROUPS = ("AC", "DC", "INV")
+MEASUREMENT_NAMES = {
+    "Efficiency": "Efficiency",
+    "Frequency": "Frequency",
+    "Irradiation": "Irradiation",
+    "Power DC": "DC power",
+    "PowerFactor": "Power factor",
+    "ReactivePower": "Reactive power",
+    "Temperature": "Temperature",
+    "YieldDay": "Yield day",
+    "YieldTotal": "Yield total",
+}
 
 
 TOTAL_SENSOR_DESCRIPTIONS = (
@@ -110,17 +130,48 @@ INVERTER_SENSOR_DESCRIPTIONS = (
         key="limit_relative",
         name="Limit relative",
         native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.POWER_FACTOR,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: _get_value(data, ("limit_relative",)),
     ),
     OpenDtuSensorEntityDescription(
         key="limit_absolute",
         name="Limit absolute",
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        device_class=SensorDeviceClass.VOLTAGE,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: _get_value(data, ("limit_absolute",)),
+    ),
+    OpenDtuSensorEntityDescription(
+        key="max_power",
+        name="Maximum power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _get_value(data, ("_limit_status", "max_power")),
+    ),
+    OpenDtuSensorEntityDescription(
+        key="limit_set_status",
+        name="Limit status",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _get_value(data, ("_limit_status", "limit_set_status")),
+    ),
+    OpenDtuSensorEntityDescription(
+        key="events",
+        name="Event count",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _get_event_count(data),  # noqa: PLW0108
+    ),
+    OpenDtuSensorEntityDescription(
+        key="last_event_message_id",
+        name="Last event message ID",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _get_value(_get_last_event(data), ("message_id",)),
+    ),
+    OpenDtuSensorEntityDescription(
+        key="last_event_message",
+        name="Last event message",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: _get_value(_get_last_event(data), ("message",)),
     ),
 )
 
@@ -149,6 +200,16 @@ async def async_setup_entry(
         )
         for inverter_index, inverter in enumerate(inverters)
         for entity_description in INVERTER_SENSOR_DESCRIPTIONS
+    )
+    async_add_entities(
+        OpenDtuInverterSensor(
+            coordinator=entry.runtime_data.coordinator,
+            entity_description=entity_description,
+            inverter_index=inverter_index,
+            inverter=inverter,
+        )
+        for inverter_index, inverter in enumerate(inverters)
+        for entity_description in _get_inverter_measurement_descriptions(inverter)
     )
 
 
@@ -188,6 +249,7 @@ class OpenDtuInverterSensor(OpenDtuEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._value_fn = entity_description.value_fn
+        self._measurement_path = entity_description.measurement_path
         self._inverter_index = inverter_index
         self._attr_device_info = get_inverter_device_info(
             coordinator,
@@ -208,6 +270,24 @@ class OpenDtuInverterSensor(OpenDtuEntity, SensorEntity):
             return None
         return self._value_fn(inverter)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return extra state attributes from OpenDTU measurements."""
+        if self._measurement_path is None:
+            return None
+
+        inverter = _get_inverter(self.coordinator.data, self._inverter_index)
+        measurement = _get_value(inverter, self._measurement_path)
+        if not isinstance(measurement, dict):
+            return None
+
+        attributes = {
+            key: value
+            for key, value in measurement.items()
+            if key not in {"v", "u", "d"}
+        }
+        return attributes or None
+
 
 def _get_value(data: Any, path: tuple[str | int, ...]) -> Any:
     """Return a nested value from OpenDTU API data."""
@@ -226,10 +306,12 @@ def _get_value(data: Any, path: tuple[str | int, ...]) -> Any:
     return value
 
 
-def _round_value(value: Any, precision: int) -> int | float | None:
+def _round_value(value: Any, precision: int | None) -> int | float | None:
     """Round a numeric value."""
     if not isinstance(value, int | float):
         return None
+    if precision is None:
+        return value
     rounded = round(value, precision)
     if precision == 0:
         return int(rounded)
@@ -258,3 +340,200 @@ def _get_inverter_identifier(inverter: Any, inverter_index: int) -> str:
     if serial not in (None, ""):
         return str(serial)
     return str(inverter_index)
+
+
+def _get_event_count(inverter: Any) -> int | None:
+    """Return the inverter event count."""
+    count = _get_value(inverter, ("_eventlog", "count"))
+    if isinstance(count, int):
+        return count
+
+    events = _get_value(inverter, ("events",))
+    if isinstance(events, int):
+        return events
+    return None
+
+
+def _get_last_event(inverter: Any) -> Any:
+    """Return the newest event log entry."""
+    events = _get_value(inverter, ("_eventlog", "events"))
+    if not isinstance(events, list) or not events:
+        return None
+    return events[-1]
+
+
+def _get_inverter_measurement_descriptions(
+    inverter: Any,
+) -> list[OpenDtuSensorEntityDescription]:
+    """Return sensor descriptions for detailed inverter measurements."""
+    descriptions: list[OpenDtuSensorEntityDescription] = []
+    for group in INVERTER_MEASUREMENT_GROUPS:
+        channels = _get_value(inverter, (group,))
+        if not isinstance(channels, dict):
+            continue
+
+        channel_count = len(channels)
+        for channel in sorted(channels, key=_sort_channel_key):
+            measurements = channels[channel]
+            if not isinstance(measurements, dict):
+                continue
+
+            for metric, measurement in measurements.items():
+                if not _is_measurement_value(measurement):
+                    continue
+                descriptions.append(
+                    _get_inverter_measurement_description(
+                        group=group,
+                        channel=str(channel),
+                        channel_count=channel_count,
+                        metric=str(metric),
+                        measurement=measurement,
+                    )
+                )
+
+    return descriptions
+
+
+def _get_inverter_measurement_description(
+    group: str,
+    channel: str,
+    channel_count: int,
+    metric: str,
+    measurement: dict[str, Any],
+) -> OpenDtuSensorEntityDescription:
+    """Return a sensor description for an inverter measurement."""
+    measurement_path = (group, channel, metric)
+    precision = _get_precision(measurement)
+    return OpenDtuSensorEntityDescription(
+        key=slugify(f"{group}_{channel}_{metric}"),
+        name=_format_measurement_entity_name(
+            group=group,
+            channel=channel,
+            channel_count=channel_count,
+            metric=metric,
+        ),
+        native_unit_of_measurement=_get_unit_of_measurement(measurement),
+        device_class=_get_device_class(metric, measurement),
+        state_class=_get_state_class(metric, measurement),
+        suggested_display_precision=precision,
+        value_fn=lambda data, path=measurement_path, decimals=precision: _round_value(
+            _get_value(data, (*path, "v")),
+            decimals,
+        ),
+        measurement_path=measurement_path,
+    )
+
+
+def _is_measurement_value(value: Any) -> bool:
+    """Return whether a value is an OpenDTU measurement object."""
+    return isinstance(value, dict) and "v" in value
+
+
+def _get_precision(measurement: dict[str, Any]) -> int | None:
+    """Return the suggested precision for a measurement."""
+    precision = measurement.get("d")
+    if isinstance(precision, int):
+        return precision
+    return None
+
+
+def _get_unit_of_measurement(measurement: dict[str, Any]) -> str | None:
+    """Return the Home Assistant unit for an OpenDTU measurement."""
+    unit = measurement.get("u")
+    if unit in (None, ""):
+        return None
+
+    return {
+        "%": PERCENTAGE,
+        "A": UnitOfElectricCurrent.AMPERE,
+        "Hz": UnitOfFrequency.HERTZ,
+        "V": UnitOfElectricPotential.VOLT,
+        "W": UnitOfPower.WATT,
+        "Wh": UnitOfEnergy.WATT_HOUR,
+        "kWh": UnitOfEnergy.KILO_WATT_HOUR,
+        "var": UnitOfReactivePower.VOLT_AMPERE_REACTIVE,
+        "°C": UnitOfTemperature.CELSIUS,
+    }.get(str(unit), str(unit))
+
+
+def _get_device_class(
+    metric: str,
+    measurement: dict[str, Any],
+) -> SensorDeviceClass | None:
+    """Return the Home Assistant device class for an OpenDTU measurement."""
+    if metric == "PowerFactor":
+        return SensorDeviceClass.POWER_FACTOR
+
+    unit = measurement.get("u")
+    if not isinstance(unit, str):
+        return None
+    if unit in ("Wh", "kWh"):
+        return SensorDeviceClass.ENERGY
+    return {
+        "A": SensorDeviceClass.CURRENT,
+        "Hz": SensorDeviceClass.FREQUENCY,
+        "V": SensorDeviceClass.VOLTAGE,
+        "W": SensorDeviceClass.POWER,
+        "var": SensorDeviceClass.REACTIVE_POWER,
+        "°C": SensorDeviceClass.TEMPERATURE,
+    }.get(unit)
+
+
+def _get_state_class(
+    metric: str,
+    measurement: dict[str, Any],
+) -> SensorStateClass | None:
+    """Return the Home Assistant state class for an OpenDTU measurement."""
+    if metric in {"YieldDay", "YieldTotal"}:
+        return SensorStateClass.TOTAL_INCREASING
+    if measurement.get("u") not in (None, ""):
+        return SensorStateClass.MEASUREMENT
+    if metric == "PowerFactor":
+        return SensorStateClass.MEASUREMENT
+    return None
+
+
+def _format_measurement_name(metric: str) -> str:
+    """Return a human readable measurement name."""
+    return MEASUREMENT_NAMES.get(metric, metric.replace("_", " "))
+
+
+def _format_measurement_entity_name(
+    group: str,
+    channel: str,
+    channel_count: int,
+    metric: str,
+) -> str:
+    """Return a Home Assistant friendly measurement entity name."""
+    measurement_name = _format_measurement_name(metric)
+    channel_number = _format_channel_number(channel)
+
+    if group == "AC":
+        prefix = "AC" if channel_count == 1 else f"AC phase {channel_number}"
+    elif group == "DC":
+        prefix = "" if channel_count == 1 else f"String {channel_number}"
+    elif group == "INV":
+        prefix = (
+            "Inverter" if channel_count == 1 else f"Inverter channel {channel_number}"
+        )
+    else:
+        prefix = group if channel_count == 1 else f"{group} {channel_number}"
+
+    if prefix == "":
+        return measurement_name
+    return f"{prefix} {measurement_name}"
+
+
+def _format_channel_number(channel: str) -> str:
+    """Return a human readable one-based channel number."""
+    if channel.isdecimal():
+        return str(int(channel) + 1)
+    return channel
+
+
+def _sort_channel_key(value: Any) -> tuple[int, str]:
+    """Sort numeric channel keys naturally."""
+    value_string = str(value)
+    if value_string.isdecimal():
+        return (int(value_string), value_string)
+    return (9999, value_string)
