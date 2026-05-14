@@ -16,5 +16,17 @@
         "abort": {
             "already_configured": "This entry is already configured."
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "scan_interval": "HA update interval"
+                },
+                "data_description": {
+                    "scan_interval": "How often Home Assistant should poll the OpenDTU REST API."
+                }
+            }
+        }
     }
 }

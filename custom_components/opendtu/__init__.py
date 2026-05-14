@@ -10,12 +10,12 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from homeassistant.const import CONF_HOST, Platform
+from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL, Platform
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
 from .api import OpenDtuApiClient
-from .const import DOMAIN, LOGGER
+from .const import DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN, LOGGER
 from .coordinator import OpenDtuDataUpdateCoordinator
 from .data import OpenDtuData
 
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .data import OpenDtuConfigEntry
 
 PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
     Platform.SENSOR,
 ]
 
@@ -39,7 +40,12 @@ async def async_setup_entry(
         hass=hass,
         logger=LOGGER,
         name=DOMAIN,
-        update_interval=timedelta(hours=1),
+        update_interval=timedelta(
+            seconds=entry.options.get(
+                CONF_SCAN_INTERVAL,
+                DEFAULT_SCAN_INTERVAL_SECONDS,
+            ),
+        ),
     )
     entry.runtime_data = OpenDtuData(
         client=OpenDtuApiClient(
