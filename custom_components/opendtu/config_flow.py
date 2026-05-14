@@ -68,14 +68,11 @@ class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
         integration = async_get_loaded_integration(self.hass, DOMAIN)
-        assert integration.documentation is not None, (  # noqa: S101
-            "Integration documentation URL is not set in manifest.json"
-        )
 
         return self.async_show_form(
             step_id="user",
             description_placeholders={
-                "documentation_url": integration.documentation,
+                "documentation_url": integration.documentation or "",
             },
             data_schema=vol.Schema(
                 {

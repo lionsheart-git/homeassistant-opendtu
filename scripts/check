@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+if [[ -x "${HOME}/.local/bin/uv" ]]; then
+    export PATH="${HOME}/.local/bin:${PATH}"
+fi
+
+uv run ruff format --check .
+uv run ruff check .
+uv run yamllint .github/workflows/ci.yml .yamllint
+uv run ty check custom_components/opendtu tests
+uv run python -m compileall -q custom_components/opendtu
+uv run pytest
+uv run bandit -q -r custom_components/opendtu -x tests
+uv run python scripts/validate_hacs.py

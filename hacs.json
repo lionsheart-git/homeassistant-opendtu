@@ -1,5 +1,7 @@
 {
     "name": "OpenDTU",
+    "zip_release": true,
+    "filename": "opendtu.zip",
     "homeassistant": "2026.3.2",
     "hacs": "2.0.5"
 }

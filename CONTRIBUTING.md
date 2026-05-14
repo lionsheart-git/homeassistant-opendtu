@@ -16,7 +16,7 @@ Pull requests are the best way to propose changes to the codebase.
 1. Fork the repo and create your branch from `main`.
 2. If you've changed something, update the documentation.
 3. Make sure your code lints (using `scripts/lint`).
-4. Test you contribution.
+4. Run the full local quality gate (using `scripts/check`).
 5. Issue that pull request!
 
 ## Any contributions you make will be under the MIT Software License
@@ -46,6 +46,13 @@ People *love* thorough bug reports. I'm not even kidding.
 
 Use `scripts/lint` to format and lint the code with Ruff.
 
+Use `scripts/check` before opening a pull request. It runs the non-mutating CI
+quality gate: Ruff format/check, YAML linting, type checks, Python compilation,
+unit tests with coverage, Bandit SAST, and HACS metadata validation.
+
+Use `scripts/security` for the security-only gate. It runs Bandit and dependency
+auditing with `pip-audit`.
+
 ## Test your code modification
 
 This custom component integrates Home Assistant with a local OpenDTU device.
@@ -55,6 +62,14 @@ if you use Visual Studio Code. With this container you will have a stand alone
 Home Assistant instance running and already configured with the included
 [`configuration.yaml`](./config/configuration.yaml)
 file.
+
+Run `scripts/test` while iterating on code. The tests cover the OpenDTU API
+client, entity mapping, Home Assistant metadata rules, and HACS packaging
+metadata.
+
+Run `scripts/package` to build the HACS release asset at
+`dist/opendtu.zip`. Tags matching `v*` trigger the GitHub Actions release job,
+which attaches that zip file to a GitHub release.
 
 ## License
 

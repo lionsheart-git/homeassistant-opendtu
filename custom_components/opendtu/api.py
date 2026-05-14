@@ -203,6 +203,8 @@ class OpenDtuApiClient:
             raise OpenDtuApiClientCommunicationError(
                 msg,
             ) from exception
+        except OpenDtuApiClientError:
+            raise
         except Exception as exception:  # pylint: disable=broad-except
             msg = f"Something really wrong happened! - {exception}"
             raise OpenDtuApiClientError(

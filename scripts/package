@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+if [[ -x "${HOME}/.local/bin/uv" ]]; then
+    export PATH="${HOME}/.local/bin:${PATH}"
+fi
+
+uv run python scripts/validate_hacs.py
+uv run python - <<'PY'
+from __future__ import annotations
+
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
+
+
+root = Path.cwd()
+source = root / "custom_components" / "opendtu"
+dist = root / "dist"
+package = dist / "opendtu.zip"
+
+dist.mkdir(exist_ok=True)
+if package.exists():
+    package.unlink()
+
+with ZipFile(package, "w", ZIP_DEFLATED) as archive:
+    for path in sorted(source.rglob("*")):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        archive.write(path, path.relative_to(root))
+
+print(f"Created {package.relative_to(root)}")
+PY
