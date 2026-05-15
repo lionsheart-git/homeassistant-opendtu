@@ -22,7 +22,7 @@ dev = [
     "pytest-cov==7.0.0",
     "ruff==0.15.7",
     "ty>=0.0.1a1",
-    "yamllint==1.37.1",
+    "yamllint==1.38.0",
 ]
 
 [tool.uv]
