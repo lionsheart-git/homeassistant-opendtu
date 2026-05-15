@@ -1,4 +1,9 @@
-"""Constants for opendtu."""
+"""
+Constants shared by OpenDTU integration modules.
+
+The constants in this module define the Home Assistant integration domain,
+attribution string, config option names, and supported polling interval bounds.
+"""
 
 from logging import Logger, getLogger
 

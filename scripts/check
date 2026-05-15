@@ -16,3 +16,4 @@ uv run python -m compileall -q custom_components/opendtu
 uv run pytest
 uv run bandit -q -r custom_components/opendtu -x tests
 uv run python scripts/validate_hacs.py
+uv run mkdocs build --strict

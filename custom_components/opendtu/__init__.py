@@ -1,8 +1,9 @@
 """
-Custom integration to integrate opendtu with Home Assistant.
+Set up and unload the OpenDTU Home Assistant integration.
 
-For more details about this integration, please refer to
-https://github.com/pg/homeassistant-opendtu
+The module creates the API client and data update coordinator for each config
+entry, performs the first refresh, updates the entry title from the OpenDTU
+hostname when available, and forwards setup to entity platforms.
 """
 
 from __future__ import annotations
@@ -42,7 +43,17 @@ async def async_setup_entry(
     hass: HomeAssistant,
     entry: OpenDtuConfigEntry,
 ) -> bool:
-    """Set up this integration using UI."""
+    """
+    Set up an OpenDTU config entry.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: OpenDTU config entry created by the config flow.
+
+    Returns:
+        `True` when setup and platform forwarding succeed.
+
+    """
     coordinator = OpenDtuDataUpdateCoordinator(
         hass=hass,
         logger=LOGGER,
@@ -86,7 +97,17 @@ async def async_unload_entry(
     hass: HomeAssistant,
     entry: OpenDtuConfigEntry,
 ) -> bool:
-    """Handle removal of an entry."""
+    """
+    Unload an OpenDTU config entry.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: Config entry being unloaded.
+
+    Returns:
+        `True` when all platforms unload successfully.
+
+    """
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
@@ -94,5 +115,12 @@ async def async_reload_entry(
     hass: HomeAssistant,
     entry: OpenDtuConfigEntry,
 ) -> None:
-    """Reload config entry."""
+    """
+    Reload an OpenDTU config entry after options change.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: Config entry to reload.
+
+    """
     await hass.config_entries.async_reload(entry.entry_id)

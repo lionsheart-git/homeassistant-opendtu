@@ -2,12 +2,12 @@
   "domain": "opendtu",
   "name": "OpenDTU",
   "codeowners": [
-    "lionsheart"
+    "@lionsheart-git"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/pg/homeassistant-opendtu",
+  "documentation": "https://github.com/lionsheart-git/homeassistant-opendtu",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/pg/homeassistant-opendtu/issues",
+  "issue_tracker": "https://github.com/lionsheart-git/homeassistant-opendtu/issues",
   "version": "0.1.0"
 }

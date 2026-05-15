@@ -1,4 +1,9 @@
-"""Sensor platform for opendtu."""
+"""
+Sensor platform for OpenDTU.
+
+The platform creates static sensors for core OpenDTU totals and inverter
+diagnostics, plus dynamic sensors for OpenDTU measurement/status payloads.
+"""
 
 from __future__ import annotations
 
@@ -45,7 +50,16 @@ MAX_SENSOR_STATE_LENGTH = 255
 
 @dataclass(frozen=True, kw_only=True)
 class OpenDtuSensorEntityDescription(SensorEntityDescription):
-    """Description for an OpenDTU sensor."""
+    """
+    Description for an OpenDTU sensor entity.
+
+    Attributes:
+        value_fn: Function that extracts the native value from coordinator data.
+        attr_fn: Optional function that extracts extra state attributes.
+        measurement_path: Optional path to an OpenDTU measurement object whose
+            metadata should be exposed as attributes.
+
+    """
 
     value_fn: OpenDtuValueFn
     attr_fn: OpenDtuAttrFn | None = None
@@ -180,7 +194,15 @@ async def async_setup_entry(
     entry: OpenDtuConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the sensor platform."""
+    """
+    Set up OpenDTU sensors for a config entry.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: OpenDTU config entry with initialized runtime data.
+        async_add_entities: Callback used to register generated entities.
+
+    """
     async_add_entities(
         OpenDtuTotalSensor(
             coordinator=entry.runtime_data.coordinator,
@@ -222,14 +244,21 @@ async def async_setup_entry(
 
 
 class OpenDtuTotalSensor(OpenDtuEntity, SensorEntity):
-    """OpenDTU total sensor."""
+    """Sensor attached to the top-level OpenDTU device."""
 
     def __init__(
         self,
         coordinator: OpenDtuDataUpdateCoordinator,
         entity_description: OpenDtuSensorEntityDescription,
     ) -> None:
-        """Initialize the sensor class."""
+        """
+        Initialize an OpenDTU total or DTU diagnostic sensor.
+
+        Args:
+            coordinator: Shared OpenDTU data coordinator.
+            entity_description: Description containing value extraction logic.
+
+        """
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._value_fn = entity_description.value_fn
@@ -240,19 +269,31 @@ class OpenDtuTotalSensor(OpenDtuEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | float | str | None:
-        """Return the native value of the sensor."""
+        """
+        Return the sensor state value.
+
+        Returns:
+            Native Home Assistant sensor value.
+
+        """
         return self._value_fn(self.coordinator.data)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return extra state attributes for the sensor."""
+        """
+        Return extra state attributes for the sensor.
+
+        Returns:
+            Optional attribute mapping derived from coordinator data.
+
+        """
         if self._attr_fn is None:
             return None
         return self._attr_fn(self.coordinator.data)
 
 
 class OpenDtuInverterSensor(OpenDtuEntity, SensorEntity):
-    """OpenDTU inverter sensor."""
+    """Sensor attached to a specific inverter device."""
 
     def __init__(
         self,
@@ -261,7 +302,16 @@ class OpenDtuInverterSensor(OpenDtuEntity, SensorEntity):
         inverter_index: int,
         inverter: Any,
     ) -> None:
-        """Initialize the sensor class."""
+        """
+        Initialize an inverter sensor.
+
+        Args:
+            coordinator: Shared OpenDTU data coordinator.
+            entity_description: Description containing value extraction logic.
+            inverter_index: Index of the inverter in coordinator data.
+            inverter: Initial inverter payload used for device metadata.
+
+        """
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._value_fn = entity_description.value_fn
@@ -280,7 +330,14 @@ class OpenDtuInverterSensor(OpenDtuEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | float | str | None:
-        """Return the native value of the sensor."""
+        """
+        Return the sensor state value.
+
+        Returns:
+            Native Home Assistant sensor value, or `None` when the inverter is
+            unavailable.
+
+        """
         inverter = _get_inverter(self.coordinator.data, self._inverter_index)
         if inverter is None:
             return None
@@ -288,7 +345,13 @@ class OpenDtuInverterSensor(OpenDtuEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return extra state attributes from OpenDTU measurements."""
+        """
+        Return extra state attributes from OpenDTU measurements.
+
+        Returns:
+            Measurement metadata excluding the raw value/unit/precision fields.
+
+        """
         if self._measurement_path is None:
             return None
 

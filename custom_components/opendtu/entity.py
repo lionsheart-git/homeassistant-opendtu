@@ -1,4 +1,10 @@
-"""OpenDTUEntity class."""
+"""
+Shared entity and device metadata helpers for OpenDTU.
+
+This module centralizes Home Assistant `DeviceInfo` creation so the OpenDTU
+device and inverter devices receive stable identifiers, useful hardware
+metadata, and predictable names.
+"""
 
 from __future__ import annotations
 
@@ -33,7 +39,17 @@ INVERTER_MODEL_PREFIXES: tuple[tuple[tuple[str, ...], str | None, str], ...] = (
 def get_dtu_device_identifier(
     coordinator: OpenDtuDataUpdateCoordinator,
 ) -> tuple[str, str]:
-    """Return the OpenDTU device identifier."""
+    """
+    Return the stable Home Assistant identifier for the OpenDTU device.
+
+    Args:
+        coordinator: Config-entry coordinator that owns the OpenDTU device.
+
+    Returns:
+        A `(domain, identifier)` tuple suitable for Home Assistant
+        `DeviceInfo.identifiers`.
+
+    """
     return (coordinator.config_entry.domain, coordinator.config_entry.entry_id)
 
 
@@ -42,7 +58,19 @@ def get_inverter_device_info(
     inverter_index: int,
     inverter: Any,
 ) -> DeviceInfo:
-    """Return device info for an inverter."""
+    """
+    Build Home Assistant device metadata for an inverter.
+
+    Args:
+        coordinator: Config-entry coordinator that owns the inverter.
+        inverter_index: Position of the inverter in the OpenDTU response.
+        inverter: Inverter payload from OpenDTU.
+
+    Returns:
+        Device metadata containing stable identifiers, serial number, model,
+        manufacturer, firmware, and hardware details when known.
+
+    """
     serial = _get_inverter_value(inverter, "serial")
     identifier = serial or f"{coordinator.config_entry.entry_id}_{inverter_index}"
     model = _get_inverter_model(inverter, serial)
@@ -70,7 +98,17 @@ def get_inverter_device_info(
 
 
 def get_dtu_device_info(coordinator: OpenDtuDataUpdateCoordinator) -> DeviceInfo:
-    """Return device info for the OpenDTU itself."""
+    """
+    Build Home Assistant device metadata for the OpenDTU itself.
+
+    Args:
+        coordinator: Config-entry coordinator containing the latest OpenDTU
+            payload.
+
+    Returns:
+        Device metadata for the top-level OpenDTU device.
+
+    """
     device_info = DeviceInfo(
         identifiers={get_dtu_device_identifier(coordinator)},
         name=get_dtu_hostname(coordinator.data) or "OpenDTU",
@@ -94,7 +132,17 @@ def get_dtu_device_info(coordinator: OpenDtuDataUpdateCoordinator) -> DeviceInfo
 
 
 def get_dtu_hostname(data: Any) -> str | None:
-    """Return the hostname from the OpenDTU network status data."""
+    """
+    Return the hostname from OpenDTU status data.
+
+    Args:
+        data: Coordinator payload or raw OpenDTU status payload.
+
+    Returns:
+        The first hostname found in known OpenDTU network payload shapes, or
+        `None` when unavailable.
+
+    """
     hostname = _get_first_value(
         data,
         (
@@ -192,13 +240,19 @@ def _get_dtu_model_id(data: Any) -> str | None:
 
 
 class OpenDtuEntity(CoordinatorEntity[OpenDtuDataUpdateCoordinator]):
-    """OpenDTUEntity class."""
+    """Base entity for all OpenDTU sensors and binary sensors."""
 
     _attr_attribution = ATTRIBUTION
     _attr_has_entity_name = True
 
     def __init__(self, coordinator: OpenDtuDataUpdateCoordinator) -> None:
-        """Initialize."""
+        """
+        Initialize the base OpenDTU entity.
+
+        Args:
+            coordinator: Shared OpenDTU data coordinator.
+
+        """
         super().__init__(coordinator)
         self._attr_unique_id = coordinator.config_entry.entry_id
         self._attr_device_info = get_dtu_device_info(coordinator)

@@ -2,7 +2,7 @@
 
 > [!CAUTION]
 > I have done this project to get a better understanding of how to use coding agents. Most of the code in here
-> was written by Codex. This project should not be seen as a production integration for the OpenDTU.
+> was written by Codex. Take this into account when using the integration.
 
 Custom Home Assistant integration for polling a local OpenDTU REST API.
 
@@ -19,6 +19,15 @@ scripts/lint
 uv run ty check custom_components/opendtu
 scripts/develop
 ```
+
+Documentation is built with MkDocs:
+
+```bash
+scripts/docs
+```
+
+The documentation source lives in `docs/` and the generated API reference is
+driven by Python docstrings through mkdocstrings.
 
 ## Supported OpenDTU APIs
 

@@ -1,4 +1,10 @@
-"""DataUpdateCoordinator for opendtu."""
+"""
+Home Assistant data coordinator for OpenDTU.
+
+The coordinator separates fast live-data updates from slower diagnostic
+updates. This keeps production sensors responsive without polling every
+diagnostic endpoint on each refresh.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +29,7 @@ if TYPE_CHECKING:
 
 # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
 class OpenDtuDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching data from the API."""
+    """Coordinate OpenDTU polling for all entities in one config entry."""
 
     config_entry: OpenDtuConfigEntry
     _last_diagnostic_update: datetime | None
@@ -37,7 +43,17 @@ class OpenDtuDataUpdateCoordinator(DataUpdateCoordinator):
         update_interval: timedelta,
         diagnostic_update_interval: timedelta,
     ) -> None:
-        """Initialize the coordinator."""
+        """
+        Initialize the coordinator.
+
+        Args:
+            hass: Home Assistant instance.
+            logger: Logger used by `DataUpdateCoordinator`.
+            name: Coordinator name shown in Home Assistant logs.
+            update_interval: Live-data polling interval.
+            diagnostic_update_interval: Optional diagnostics polling interval.
+
+        """
         super().__init__(
             hass=hass,
             logger=logger,
@@ -48,7 +64,19 @@ class OpenDtuDataUpdateCoordinator(DataUpdateCoordinator):
         self._last_diagnostic_update = None
 
     async def _async_update_data(self) -> Any:
-        """Update data via library."""
+        """
+        Fetch a fresh coordinator payload.
+
+        Returns:
+            OpenDTU data for the current update. Diagnostic payloads are either
+            refreshed or carried forward from the previous update.
+
+        Raises:
+            ConfigEntryAuthFailed: OpenDTU rejected authentication for a
+                required endpoint.
+            UpdateFailed: A required OpenDTU endpoint could not be refreshed.
+
+        """
         include_diagnostics = self._should_update_diagnostics()
         try:
             data = await self.config_entry.runtime_data.client.async_get_data(
@@ -66,7 +94,14 @@ class OpenDtuDataUpdateCoordinator(DataUpdateCoordinator):
         return data
 
     def _should_update_diagnostics(self) -> bool:
-        """Return whether diagnostics should be refreshed on this update."""
+        """
+        Return whether diagnostics should be refreshed on this update.
+
+        Returns:
+            `True` for the first update and whenever the diagnostic interval has
+            elapsed.
+
+        """
         if self.data is None or self._last_diagnostic_update is None:
             return True
         return (
@@ -76,7 +111,15 @@ class OpenDtuDataUpdateCoordinator(DataUpdateCoordinator):
 
 
 def _merge_previous_diagnostics(data: Any, previous_data: Any) -> None:
-    """Carry diagnostics forward when this update only refreshed live data."""
+    """
+    Carry diagnostics forward when this update only refreshed live data.
+
+    Args:
+        data: New mutable live-data response.
+        previous_data: Previous coordinator payload that may contain diagnostic
+            fields.
+
+    """
     if not isinstance(data, dict) or not isinstance(previous_data, dict):
         return
 
@@ -100,7 +143,16 @@ def _merge_previous_diagnostics(data: Any, previous_data: Any) -> None:
 
 
 def _get_inverters_by_serial(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Return inverter data keyed by serial."""
+    """
+    Return inverter data keyed by serial.
+
+    Args:
+        data: Coordinator payload containing an optional `inverters` list.
+
+    Returns:
+        Dict keyed by stringified inverter serial.
+
+    """
     inverters = data.get("inverters")
     if not isinstance(inverters, list):
         return {}

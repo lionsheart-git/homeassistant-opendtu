@@ -1,4 +1,9 @@
-"""Adds config flow for OpenDTU."""
+"""
+Config and options flows for OpenDTU.
+
+The config flow validates a local OpenDTU host by fetching the REST API. The
+options flow exposes live and diagnostic polling intervals.
+"""
 
 from __future__ import annotations
 
@@ -31,7 +36,7 @@ from .entity import get_dtu_hostname
 
 
 class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for OpenDTU."""
+    """Handle the OpenDTU user setup flow."""
 
     VERSION = 1
 
@@ -40,14 +45,33 @@ class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,  # noqa: ARG004 Unused argument
     ) -> config_entries.OptionsFlow:
-        """Create the options flow."""
+        """
+        Create the options flow.
+
+        Args:
+            config_entry: Existing OpenDTU config entry.
+
+        Returns:
+            Options flow handler for polling intervals.
+
+        """
         return OpenDtuOptionsFlowHandler()
 
     async def async_step_user(
         self,
         user_input: dict | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Handle a flow initialized by the user."""
+        """
+        Handle a user-initiated config flow step.
+
+        Args:
+            user_input: Form data containing the configured OpenDTU host, or
+                `None` when the form should be shown.
+
+        Returns:
+            Home Assistant config flow result.
+
+        """
         _errors = {}
         if user_input is not None:
             try:
@@ -95,7 +119,22 @@ class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _test_credentials(self, host: str) -> object:
-        """Validate the OpenDTU host."""
+        """
+        Validate that a host responds like an OpenDTU device.
+
+        Args:
+            host: Host, IP address, or URL submitted by the user.
+
+        Returns:
+            Initial OpenDTU API payload used to derive the config entry title.
+
+        Raises:
+            OpenDtuApiClientAuthenticationError: OpenDTU requires or rejects
+                authentication.
+            OpenDtuApiClientCommunicationError: OpenDTU cannot be reached.
+            OpenDtuApiClientError: Any other API client failure.
+
+        """
         client = OpenDtuApiClient(
             host=host,
             session=async_create_clientsession(self.hass),
@@ -104,13 +143,22 @@ class OpenDtuFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OpenDtuOptionsFlowHandler(config_entries.OptionsFlow):
-    """Options flow for OpenDTU."""
+    """Handle editable OpenDTU integration options."""
 
     async def async_step_init(
         self,
         user_input: dict | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Manage OpenDTU options."""
+        """
+        Show or save OpenDTU options.
+
+        Args:
+            user_input: Submitted option values, or `None` to show the form.
+
+        Returns:
+            Home Assistant options flow result.
+
+        """
         if user_input is not None:
             return self.async_create_entry(
                 title="",

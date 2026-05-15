@@ -1,4 +1,11 @@
-"""Naming helpers for OpenDTU entities."""
+"""
+Friendly naming and diagnostic filtering helpers.
+
+OpenDTU status endpoints often repeat endpoint names in payload keys, for
+example `mqtt_connected` inside the MQTT endpoint. These helpers produce compact
+Home Assistant names and hide raw diagnostic fields that are better represented
+as device metadata.
+"""
 
 from __future__ import annotations
 
@@ -62,7 +69,18 @@ IGNORED_DTU_STATUS_PATHS = {
 
 
 def should_skip_dtu_status_path(endpoint: str, path: tuple[str, ...]) -> bool:
-    """Return whether a DTU status path is too internal for HA entities."""
+    """
+    Return whether a DTU status path should not become an entity.
+
+    Args:
+        endpoint: DTU status endpoint key such as `network` or `system`.
+        path: Path to a scalar value inside that endpoint payload.
+
+    Returns:
+        `True` when the value is internal noise or already represented as
+        device metadata.
+
+    """
     normalized_path = tuple(part.casefold().replace("-", "_") for part in path)
     return any(
         endpoint.casefold() == ignored_endpoint
@@ -76,7 +94,17 @@ def should_skip_dtu_status_path(endpoint: str, path: tuple[str, ...]) -> bool:
 
 
 def format_dtu_status_name(endpoint: str, path: tuple[str, ...]) -> str:
-    """Return a Home Assistant friendly DTU status entity name."""
+    """
+    Return a Home Assistant friendly DTU status entity name.
+
+    Args:
+        endpoint: DTU status endpoint key such as `mqtt` or `network`.
+        path: Path to a scalar value inside that endpoint payload.
+
+    Returns:
+        Human-friendly entity name without duplicated endpoint words.
+
+    """
     endpoint_label = DTU_STATUS_LABELS.get(endpoint, format_label_part(endpoint))
     path_label = " ".join(
         format_label_part(part) for part in _get_dtu_status_label_parts(endpoint, path)
@@ -87,7 +115,16 @@ def format_dtu_status_name(endpoint: str, path: tuple[str, ...]) -> str:
 
 
 def format_label_part(value: str) -> str:
-    """Return a human readable label part."""
+    """
+    Return a human-readable label part.
+
+    Args:
+        value: Raw OpenDTU key fragment.
+
+    Returns:
+        Title-cased label fragment with common acronyms preserved.
+
+    """
     normalized = value.casefold()
     if normalized in LABEL_PARTS:
         return LABEL_PARTS[normalized]

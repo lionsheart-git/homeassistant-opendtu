@@ -1,0 +1,48 @@
+---
+site_name: OpenDTU Home Assistant Integration
+site_description: Home Assistant custom integration for local OpenDTU devices.
+repo_url: https://github.com/lionsheart-git/homeassistant-opendtu
+edit_uri: edit/main/docs/
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - .
+          options:
+            docstring_style: google
+            filters:
+              - "!^_"
+            heading_level: 2
+            members_order: source
+            separate_signature: true
+            show_root_heading: true
+            show_signature_annotations: true
+
+nav:
+  - Overview: index.md
+  - Installation: installation.md
+  - Configuration: configuration.md
+  - Architecture: architecture.md
+  - Development: development.md
+  - API Reference:
+      - Package: reference/package.md
+      - API Client: reference/api.md
+      - Coordinator: reference/coordinator.md
+      - Entity Helpers: reference/entity.md
+      - Sensors: reference/sensor.md
+      - Binary Sensors: reference/binary_sensor.md
+      - Config Flow: reference/config_flow.md
+      - Naming Helpers: reference/naming.md
+      - Data Types: reference/data.md
+      - Constants: reference/const.md

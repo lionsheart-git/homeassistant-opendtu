@@ -1,4 +1,9 @@
-"""Binary sensor platform for opendtu."""
+"""
+Binary sensor platform for OpenDTU.
+
+The platform creates static hint/inverter status binary sensors and dynamic
+binary sensors for boolean DTU diagnostic status values.
+"""
 
 from __future__ import annotations
 
@@ -30,7 +35,13 @@ type OpenDtuBinaryValueFn = Callable[[Any], bool | None]
 
 @dataclass(frozen=True, kw_only=True)
 class OpenDtuBinarySensorEntityDescription(BinarySensorEntityDescription):
-    """Description for an OpenDTU binary sensor."""
+    """
+    Description for an OpenDTU binary sensor.
+
+    Attributes:
+        value_fn: Function that extracts a boolean state from coordinator data.
+
+    """
 
     value_fn: OpenDtuBinaryValueFn
 
@@ -98,7 +109,15 @@ async def async_setup_entry(
     entry: OpenDtuConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the binary sensor platform."""
+    """
+    Set up OpenDTU binary sensors for a config entry.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: OpenDTU config entry with initialized runtime data.
+        async_add_entities: Callback used to register generated entities.
+
+    """
     async_add_entities(
         OpenDtuHintBinarySensor(
             coordinator=entry.runtime_data.coordinator,
@@ -130,14 +149,21 @@ async def async_setup_entry(
 
 
 class OpenDtuHintBinarySensor(OpenDtuEntity, BinarySensorEntity):
-    """OpenDTU hint binary sensor."""
+    """Binary sensor attached to the top-level OpenDTU device."""
 
     def __init__(
         self,
         coordinator: OpenDtuDataUpdateCoordinator,
         entity_description: OpenDtuBinarySensorEntityDescription,
     ) -> None:
-        """Initialize the binary sensor class."""
+        """
+        Initialize an OpenDTU hint or DTU diagnostic binary sensor.
+
+        Args:
+            coordinator: Shared OpenDTU data coordinator.
+            entity_description: Description containing state extraction logic.
+
+        """
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._value_fn = entity_description.value_fn
@@ -147,12 +173,18 @@ class OpenDtuHintBinarySensor(OpenDtuEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return true if the binary sensor is on."""
+        """
+        Return whether the binary sensor is on.
+
+        Returns:
+            Boolean state or `None` when unavailable.
+
+        """
         return self._value_fn(self.coordinator.data)
 
 
 class OpenDtuInverterBinarySensor(OpenDtuEntity, BinarySensorEntity):
-    """OpenDTU inverter binary sensor."""
+    """Binary sensor attached to a specific inverter device."""
 
     def __init__(
         self,
@@ -161,7 +193,16 @@ class OpenDtuInverterBinarySensor(OpenDtuEntity, BinarySensorEntity):
         inverter_index: int,
         inverter: Any,
     ) -> None:
-        """Initialize the binary sensor class."""
+        """
+        Initialize an inverter binary sensor.
+
+        Args:
+            coordinator: Shared OpenDTU data coordinator.
+            entity_description: Description containing state extraction logic.
+            inverter_index: Index of the inverter in coordinator data.
+            inverter: Initial inverter payload used for device metadata.
+
+        """
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._value_fn = entity_description.value_fn
@@ -179,7 +220,13 @@ class OpenDtuInverterBinarySensor(OpenDtuEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return true if the binary sensor is on."""
+        """
+        Return whether the binary sensor is on.
+
+        Returns:
+            Boolean state or `None` when the inverter is unavailable.
+
+        """
         inverter = _get_inverter(self.coordinator.data, self._inverter_index)
         if inverter is None:
             return None

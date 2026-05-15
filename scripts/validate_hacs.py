@@ -15,7 +15,13 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 
 def main() -> int:
-    """Validate HACS and Home Assistant package metadata."""
+    """
+    Validate HACS and Home Assistant package metadata.
+
+    Returns:
+        Process exit code. Returns `0` when metadata is valid, otherwise `1`.
+
+    """
     errors: list[str] = []
 
     pyproject = _load_toml(ROOT / "pyproject.toml", errors)
@@ -73,7 +79,17 @@ def main() -> int:
 
 
 def _load_json(path: Path, errors: list[str]) -> dict[str, Any]:
-    """Load a JSON file and collect validation errors."""
+    """
+    Load a JSON file and collect validation errors.
+
+    Args:
+        path: JSON file to load.
+        errors: Mutable error list populated when loading fails.
+
+    Returns:
+        Parsed JSON object, or an empty dict when loading fails.
+
+    """
     try:
         return json.loads(path.read_text())
     except FileNotFoundError:
@@ -84,7 +100,17 @@ def _load_json(path: Path, errors: list[str]) -> dict[str, Any]:
 
 
 def _load_toml(path: Path, errors: list[str]) -> dict[str, Any]:
-    """Load a TOML file and collect validation errors."""
+    """
+    Load a TOML file and collect validation errors.
+
+    Args:
+        path: TOML file to load.
+        errors: Mutable error list populated when loading fails.
+
+    Returns:
+        Parsed TOML object, or an empty dict when loading fails.
+
+    """
     try:
         return tomllib.loads(path.read_text())
     except FileNotFoundError:
